@@ -34,7 +34,7 @@ If you give yourself the role "Bot Admin" on your server, you will get direct me
 
 ## Contributing
 
-I work on this project mainly for fun and don't expect any contributions. But if you like the bot and want to add a feature, send a PR!
+I work on this project mainly for fun and don't expect any contributions. But if you like the bot and want to add a feature, don't hesitate to make a pull request!
 
 ## Acknowledgments
 
