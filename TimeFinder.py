@@ -21,7 +21,7 @@ def initialize_time_intervals():
     guild = discord.utils.get(bot.guilds, name=GUILD)
 
     for member in guild.members:
-        if not member.name is bot.user.name:
+        if not member.bot:
             time_intervals[member.name] = I.empty()
 
 def time_interval_to_str(interval):
@@ -110,15 +110,25 @@ async def show(ctx):
     await send_state_in_discord(f'show ({ctx.author.name})')
 
 @commands.has_role('Bot Admin')
-@bot.command(name='reset', help='Empties the timetable')
-async def reset(ctx):
+@bot.command(name='reset_all', help='Empties the timetable for everyone, only "Bot Admin" can do this')
+async def reset_all(ctx):
     time_intervals.clear()
 
     initialize_time_intervals()
 
     await ctx.send('Emptied the timetable.')
 
-    await send_state_in_discord(f'reset ({ctx.author.name})')
+    await send_state_in_discord(f'reset_all ({ctx.author.name})')
+
+@bot.command(name='reset_me', help='Empties the timetable for the calling user')
+async def reset_me(ctx):
+    name = ctx.author.name
+
+    time_intervals[name] = I.empty()
+
+    await ctx.send(f'Emptied the timetable for {name}.')
+
+    await send_state_in_discord(f'reset_me ({name})')
 
 @bot.event
 async def on_command_error(ctx, error):
