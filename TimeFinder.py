@@ -8,6 +8,8 @@ from datetime import datetime
 from datetime import time
 import intervals as I
 
+import ast
+
 load_dotenv()
 
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -18,11 +20,23 @@ bot = commands.Bot(command_prefix='!')
 time_intervals = {}
 
 def initialize_time_intervals():
-    guild = discord.utils.get(bot.guilds, name=GUILD)
+    try:
+        with open('TimeFinder.data', 'r') as file:
+            raw_string = file.read()
+        
+        string_dict = ast.literal_eval(raw_string)
 
-    for member in guild.members:
-        if not member.bot:
-            time_intervals[member.name] = I.empty()
+        converter = lambda s: datetime.strptime(s, '%H:%M').time()
+
+        for name, string_interval in string_dict.items():
+            time_intervals[name] = I.from_string(string_interval, conv = converter)
+
+    except:
+        guild = discord.utils.get(bot.guilds, name=GUILD)
+
+        for member in guild.members:
+            if not member.bot:
+                time_intervals[member.name] = I.empty()
 
 def time_interval_to_str(interval):
     params = {
@@ -32,7 +46,7 @@ def time_interval_to_str(interval):
         'right_closed': '',
         'left_open': '',
         'right_open': '',
-        'conv': lambda v: v.strftime('%H:%M')
+        'conv': lambda s: s.strftime('%H:%M')
     }
 
     return I.to_string(interval, **params)
@@ -130,6 +144,14 @@ async def reset_me(ctx):
 
     await send_state_in_discord(f'reset_me ({name})')
 
+@bot.command(name='disconnect', help='Disconnects the bot and saves the timetable')
+async def disconnect(ctx):
+    await ctx.send('Goodbye.')
+
+    await send_state_in_discord('disconnect')
+
+    await bot.logout()
+
 @bot.event
 async def on_command_error(ctx, error):
     title = 'ERROR'
@@ -140,5 +162,15 @@ async def on_command_error(ctx, error):
         title = 'Permission denied'
     
     await send_state_in_discord(title)
+
+@bot.event
+async def on_disconnect():
+    store_dict = {}
+
+    for name, interval in time_intervals.items():
+        store_dict[name] = I.to_string(interval, conv = lambda v: v.strftime('%H:%M'))
+
+    with open('TimeFinder.data', 'w+') as file:
+        file.write(str(store_dict))
 
 bot.run(TOKEN)
