@@ -38,5 +38,5 @@ I work on this project mainly for fun and don't expect any contributions. But if
 
 ## Acknowledgments
 
-* Great guide I used for this project: https://realpython.com/how-to-make-a-discord-bot-python/.
+* Great guide I used to start this project: https://realpython.com/how-to-make-a-discord-bot-python/.
 * You could just use Doodle or something like that.

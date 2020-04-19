@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 
 import discord
-from discord.ext import commands
+from discord.ext import tasks, commands
 
 from datetime import datetime
 from datetime import time
@@ -38,6 +38,15 @@ def initialize_time_intervals():
             if not member.bot:
                 time_intervals[member.name] = I.empty()
 
+def save_time_intervals():
+    store_dict = {}
+
+    for name, interval in time_intervals.items():
+        store_dict[name] = I.to_string(interval, conv = lambda v: v.strftime('%H:%M'))
+
+    with open('TimeFinder.data', 'w+') as file:
+        file.write(str(store_dict))
+
 def time_interval_to_str(interval):
     params = {
         'disj': ', ',
@@ -70,6 +79,10 @@ async def send_state_in_discord(title):
 
         await member.dm_channel.send(all_intervals_md_format(title))
 
+@tasks.loop(hours = 1)
+async def keep_saving():
+    save_time_intervals()
+
 @bot.event
 async def on_ready():
     guild = discord.utils.get(bot.guilds, name=GUILD)
@@ -81,9 +94,11 @@ async def on_ready():
 
     initialize_time_intervals()
 
+    keep_saving.start()
+
     await send_state_in_discord('ready')
 
-@bot.command(name='add', help='Adds a time interval, format: XX:XX XX:XX')
+@bot.command(name = 'add', help = 'Adds a time interval, format: XX:XX XX:XX')
 async def add(ctx, time_begin , time_end):
     name = ctx.author.name
 
@@ -93,9 +108,13 @@ async def add(ctx, time_begin , time_end):
             datetime.strptime(time_end, '%H:%M').time()
             )
 
-        time_intervals[name] |= time_interval
+        if time_interval.is_empty():
+            await ctx.send('Your time interval is empty. Did you swap the begin and end time?')
 
-        await ctx.send(f'Added {time_interval_to_str(time_interval)} for {name}.')
+        else:
+            time_intervals[name] |= time_interval
+
+            await ctx.send(f'Added {time_interval_to_str(time_interval)} for {name}.')
 
     except:
         await ctx.send('Incorrect time format.')
@@ -103,7 +122,7 @@ async def add(ctx, time_begin , time_end):
     finally:
         await send_state_in_discord(f'add ({ctx.author.name})')
 
-@bot.command(name='when', help='Calculates the common time of all members')
+@bot.command(name = 'when', help = 'Calculates the common time of all members')
 async def when(ctx):
     common_interval = I.closed(time(0, 1), time(23, 59))
 
@@ -117,14 +136,14 @@ async def when(ctx):
 
     await send_state_in_discord(f'when ({ctx.author.name})')
 
-@bot.command(name='show', help='Prints all currently registered time intervals')
+@bot.command(name = 'show', help = 'Prints all currently registered time intervals')
 async def show(ctx):
     await ctx.send(all_intervals_md_format('Time intervals'))
 
     await send_state_in_discord(f'show ({ctx.author.name})')
 
 @commands.has_role('Bot Admin')
-@bot.command(name='reset_all', help='Empties the timetable for everyone, only "Bot Admin" can do this')
+@bot.command(name = 'reset_all', help = 'Empties the timetable for everyone, only "Bot Admin" can do this')
 async def reset_all(ctx):
     time_intervals.clear()
 
@@ -134,7 +153,7 @@ async def reset_all(ctx):
 
     await send_state_in_discord(f'reset_all ({ctx.author.name})')
 
-@bot.command(name='reset_me', help='Empties the timetable for the calling user')
+@bot.command(name = 'reset_me', help = 'Empties the timetable for the calling user')
 async def reset_me(ctx):
     name = ctx.author.name
 
@@ -144,7 +163,8 @@ async def reset_me(ctx):
 
     await send_state_in_discord(f'reset_me ({name})')
 
-@bot.command(name='disconnect', help='Disconnects the bot and saves the timetable')
+@commands.has_role('Bot Admin')
+@bot.command(name = 'disconnect', help = 'Disconnects the bot and saves the timetable')
 async def disconnect(ctx):
     await ctx.send('Goodbye.')
 
@@ -156,21 +176,30 @@ async def disconnect(ctx):
 async def on_command_error(ctx, error):
     title = 'ERROR'
 
-    if isinstance(error, commands.errors.CheckFailure):
-        await ctx.send('You are not allowed to do this')
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send('You are not allowed to do this.')
 
-        title = 'Permission denied'
-    
+        title = 'CheckFailure'
+
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send('A required argument is missing.')
+
+        title = 'MissingRequiredArgument'
+
+    elif isinstance(error, commands.CommandNotFound):
+        await ctx.send('This command does not exist. Did you misspell it?')
+
+        title = 'CommandNotFound'
+
     await send_state_in_discord(title)
+
+    # enable for debugging
+    # raise error
 
 @bot.event
 async def on_disconnect():
-    store_dict = {}
+    keep_saving.stop()
 
-    for name, interval in time_intervals.items():
-        store_dict[name] = I.to_string(interval, conv = lambda v: v.strftime('%H:%M'))
-
-    with open('TimeFinder.data', 'w+') as file:
-        file.write(str(store_dict))
+    save_time_intervals()
 
 bot.run(TOKEN)
