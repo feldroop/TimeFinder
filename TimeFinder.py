@@ -10,14 +10,17 @@ import intervals as I
 
 import ast
 
+# to be eliminated when discord.py version 1.4 is available
+saving_loop_running = False
+
+time_intervals = {}
+
 load_dotenv()
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD = os.getenv('DISCORD_GUILD')
 
 bot = commands.Bot(command_prefix='!')
-
-time_intervals = {}
 
 def initialize_time_intervals():
     try:
@@ -36,7 +39,7 @@ def initialize_time_intervals():
 
         for member in guild.members:
             if not member.bot:
-                time_intervals[member.name] = I.empty()
+                time_intervals[member.display_name] = I.empty()
 
 def save_time_intervals():
     store_dict = {}
@@ -94,33 +97,40 @@ async def on_ready():
 
     initialize_time_intervals()
 
-    keep_saving.start()
+    global saving_loop_running
+    if not saving_loop_running:
+        keep_saving.start()
+        saving_loop_running = True
 
     await send_state_in_discord('ready')
 
 @bot.command(name = 'add', help = 'Adds a time interval, format: XX:XX XX:XX')
-async def add(ctx, time_begin , time_end):
-    name = ctx.author.name
+async def add(ctx, time_begin, time_end):
+    name = ctx.author.display_name
 
     try:
-        time_interval = I.closed(
+        time_interval = I.open(
             datetime.strptime(time_begin, '%H:%M').time(),
             datetime.strptime(time_end, '%H:%M').time()
             )
 
-        if time_interval.is_empty():
-            await ctx.send('Your time interval is empty. Did you swap the begin and end time?')
-
-        else:
-            time_intervals[name] |= time_interval
-
-            await ctx.send(f'Added {time_interval_to_str(time_interval)} for {name}.')
-
     except:
         await ctx.send('Incorrect time format.')
     
-    finally:
-        await send_state_in_discord(f'add ({ctx.author.name})')
+    
+    if time_interval.is_empty():
+        await ctx.send('Your time interval is empty. Did you swap the begin and end time?')
+
+    else:
+        try: 
+            time_intervals[name] |= time_interval
+
+            await ctx.send(f'Added {time_interval_to_str(time_interval)} for {name}.')
+        
+        except:
+            await ctx.send('Insertion failed. Try full reseting if possible.')
+
+    await send_state_in_discord(f'add ({name})')
 
 @bot.command(name = 'when', help = 'Calculates the common time of all members')
 async def when(ctx):
@@ -134,7 +144,7 @@ async def when(ctx):
     else:
         await ctx.send(time_interval_to_str(common_interval))
 
-    await send_state_in_discord(f'when ({ctx.author.name})')
+    await send_state_in_discord(f'when ({ctx.author.display_name})')
 
 @bot.command(name = 'show', help = 'Prints all currently registered time intervals')
 async def show(ctx):
@@ -143,19 +153,34 @@ async def show(ctx):
     await send_state_in_discord(f'show ({ctx.author.name})')
 
 @commands.has_role('Bot Admin')
-@bot.command(name = 'reset_all', help = 'Empties the timetable for everyone, only "Bot Admin" can do this')
+@bot.command(name = 'reset_all', help = 'Resets the timetable for everyone to the last saved state, only "Bot Admin" can do this')
 async def reset_all(ctx):
     time_intervals.clear()
 
     initialize_time_intervals()
 
+    await ctx.send('Reseted the timetable.')
+
+    await send_state_in_discord(f'reset_all ({ctx.author.display_name})')
+
+@commands.has_role('Bot Admin')
+@bot.command(name = 'empty', help = 'Empties the timetable for everyone, only "Bot Admin" can do this')
+async def empty(ctx):
+    time_intervals.clear()
+
+    guild = discord.utils.get(bot.guilds, name=GUILD)
+
+    for member in guild.members:
+        if not member.bot:
+            time_intervals[member.display_name] = I.empty()
+
     await ctx.send('Emptied the timetable.')
 
-    await send_state_in_discord(f'reset_all ({ctx.author.name})')
+    await send_state_in_discord(f'empty ({ctx.author.display_name})')
 
-@bot.command(name = 'reset_me', help = 'Empties the timetable for the calling user')
-async def reset_me(ctx):
-    name = ctx.author.name
+@bot.command(name = 'empty_me', help = 'Empties the timetable for the calling user')
+async def empty_me(ctx):
+    name = ctx.author.display_name
 
     time_intervals[name] = I.empty()
 
@@ -171,6 +196,26 @@ async def disconnect(ctx):
     await send_state_in_discord('disconnect')
 
     await bot.logout()
+
+@bot.event
+async def on_member_join(member):
+    if not member.bot:
+        time_intervals[member.display_name] = I.empty()
+
+@bot.event
+async def on_member_remove(member):
+    if not member.bot:
+        del time_intervals[member.display_name]
+
+@bot.event
+async def on_member_update(before, after):
+    if not after.bot:
+        time_intervals[after.display_name] = time_intervals.pop(before.display_name)
+
+@bot.event
+async def on_user_update(before, after):
+    if not after.bot:
+        time_intervals[after.display_name] = time_intervals.pop(before.display_name)
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -190,6 +235,11 @@ async def on_command_error(ctx, error):
         await ctx.send('This command does not exist. Did you misspell it?')
 
         title = 'CommandNotFound'
+
+    elif isinstance(error, commands.TooManyArguments):
+        await ctx.send('You entered too many Arguments.')
+
+        title = 'MissingRequiredArgument'
 
     await send_state_in_discord(title)
 
