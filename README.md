@@ -6,7 +6,7 @@ A discord bot to find common available times for meetings.
 
 ### Prerequisites
 
-Apart from a discord account and running server you will need Python 3 (.6.9+) and the following packages:
+Apart from a discord account and running server you will need Python 3 (.7+) and the following packages:
 
 ```
 discord.py (1.3.3)
@@ -28,7 +28,7 @@ GUILD={your-server/guild's-name}
 
 ### Run
 
-Run `TimeFinder.py` with your Python 3 distribution. It should connect to your server, where you can find out more about the command interface by typing `!help`. 
+Run `main.py` with your Python 3 distribution. It should connect to your server, where you can find out more about the command interface by typing `!help`. 
 
 If you give yourself the role "Bot Admin" on your server, you will get direct messages about the internal state of the program every time someone enters a command. This feature exists mainly for debugging purposes.
 
