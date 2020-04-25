@@ -3,6 +3,7 @@ from datetime import datetime
 
 from utils import (
     send_state_in_discord,
+    time_interval_to_str,
     initialize_time_intervals,
     get,
     I
@@ -36,7 +37,7 @@ class Input(commands.Cog):
 
         else:
             try: 
-                time_intervals[name] |= time_interval
+                time_intervals[ctx.author.id] |= time_interval
 
                 await ctx.send(f'Added {time_interval_to_str(time_interval)} for {name}.')
             
@@ -65,7 +66,7 @@ class Input(commands.Cog):
 
         for member in guild.members:
             if not member.bot:
-                time_intervals[member.display_name] = I.empty()
+                time_intervals[member.id] = I.empty()
 
         await ctx.send('Emptied the timetable.')
 
@@ -75,7 +76,7 @@ class Input(commands.Cog):
     async def empty_me(self, ctx):
         name = ctx.author.display_name
 
-        time_intervals[name] = I.empty()
+        time_intervals[ctx.author.id] = I.empty()
 
         await ctx.send(f'Emptied the timetable for {name}.')
 

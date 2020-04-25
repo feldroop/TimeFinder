@@ -20,21 +20,21 @@ def initialize_time_intervals():
 
         converter = lambda s: datetime.strptime(s, '%H:%M').time()
 
-        for name, string_interval in string_dict.items():
-            time_intervals[name] = I.from_string(string_interval, conv = converter)
+        for user_id, string_interval in string_dict.items():
+            time_intervals[user_id] = I.from_string(string_interval, conv = converter)
 
     except:
         guild = get(bot.guilds, name=GUILD)
 
         for member in guild.members:
             if not member.bot:
-                time_intervals[member.display_name] = I.empty()
+                time_intervals[member.id] = I.empty()
 
 def save_time_intervals():
     store_dict = {}
 
-    for name, interval in time_intervals.items():
-        store_dict[name] = I.to_string(interval, conv = lambda v: v.strftime('%H:%M'))
+    for user_id, interval in time_intervals.items():
+        store_dict[user_id] = I.to_string(interval, conv = lambda v: v.strftime('%H:%M'))
 
     with open('TimeFinder.data', 'w+') as file:
         file.write(str(store_dict))
@@ -54,9 +54,12 @@ def time_interval_to_str(interval):
 
 def all_intervals_md_format(title):
     string = '```' + title + ':\n'
+    
+    guild = get(bot.guilds, name=GUILD) 
 
-    for name, interval in time_intervals.items():
-        string += f'\t{name}: {time_interval_to_str(interval)}\n'
+    for user_id, interval in time_intervals.items():
+        member = get(guild.members, id=user_id)
+        string += f'\t{member.display_name}: {time_interval_to_str(interval)}\n'
     
     return string + '```'
 

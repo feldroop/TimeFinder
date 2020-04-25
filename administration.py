@@ -49,22 +49,12 @@ class Administration(commands.Cog):
     @commands.Cog.listener()
     async def on_member_join(self, member):
         if not member.bot:
-            time_intervals[member.display_name] = I.empty()
+            time_intervals[member.id] = I.empty()
 
     @commands.Cog.listener()
     async def on_member_remove(self, member):
         if not member.bot:
-            del time_intervals[member.display_name]
-
-    @commands.Cog.listener()
-    async def on_member_update(self, before, after):
-        if not after.bot:
-            time_intervals[after.display_name] = time_intervals.pop(before.display_name)
-
-    @commands.Cog.listener()
-    async def on_user_update(self, before, after):
-        if not after.bot:
-            time_intervals[after.display_name] = time_intervals.pop(before.display_name)
+            del time_intervals[member.id]
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
@@ -93,7 +83,7 @@ class Administration(commands.Cog):
         await send_state_in_discord(title)
 
         # enable for debugging
-        # raise error
+        raise error
 
     @commands.Cog.listener()
     async def on_disconnect(self):
