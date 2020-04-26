@@ -14,3 +14,5 @@ saving_loop_running = False
 time_intervals = {}
 
 bot = commands.Bot(command_prefix='!')
+
+time_format = '%a:%H:%M'
