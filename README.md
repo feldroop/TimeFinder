@@ -11,7 +11,7 @@ Apart from a discord account and running server you will need Python 3 (.7+) and
 ```
 discord.py (1.3.3)
 python-dotenv (0.13.0)
-python-intervals (1.10.0.post1)
+portion (2.0.1)
 ```
 
 It might also run on older/newer versions of the above software.
@@ -31,6 +31,13 @@ GUILD={your-server/guild's-name}
 Run `main.py` with your Python 3 distribution. It should connect to your server, where you can find out more about the command interface by typing `!help`. 
 
 If you give yourself the role "Bot Admin" on your server, you will get direct messages about the internal state of the program every time someone enters a command. This feature exists mainly for debugging purposes.
+
+### Usage
+
+All members of a discord server register time intervals to indicate when they are available. 
+You can modify these intervals with `!add` and `!remove`. Afterwards these intervals can be displayed with `!show_me` or `!show_all`. Common available time intervals are computed with `!when`.
+
+For more information about all commands and workflows call `!help` and `!tutorial`
 
 ## Contributing
 

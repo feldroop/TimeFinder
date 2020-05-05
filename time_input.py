@@ -1,83 +1,127 @@
 from discord.ext import commands
-from datetime import datetime
+from operator import or_, sub
 
 from utils import (
-    send_state_in_discord,
-    time_interval_to_str,
-    initialize_time_intervals,
-    get,
-    I
+    time_intervals_to_str_readable,
+    long_name,
+    build_iterator,
+    update_time_interval
 )
 
-from config import (
-    time_intervals,
-    GUILD
+from queries import (
+    delete_user,
+    delete_all,
+    in_database,
+    empty_user,
+    empty_all,
+    get_time_interval,
+    set_time_interval
 )
 
 class Input(commands.Cog):
+    """The commands in this command group modify your registered time intervals."""
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name = 'add', help = 'Adds a time interval, format: XX:XX XX:XX')
-    async def add(self, ctx, time_begin, time_end):
-        name = ctx.author.display_name
-
-        try:
-            time_interval = I.open(
-                datetime.strptime(time_begin, '%H:%M').time(),
-                datetime.strptime(time_end, '%H:%M').time()
-                )
-
-        except:
-            await ctx.send('Incorrect time format.')
+    @commands.command(name = 'add')
+    async def add(self, ctx, mode_pattern, day_pattern, *time_intervals):
+        """Adds one or more time intervals for the calling user
         
+        It is possible to enter an arbitrary number of time intervals. The format of the time intervals has to be XX:XX-XX:XX.
         
-        if time_interval.is_empty():
-            await ctx.send('Your time interval is empty. Did you swap the begin and end time?')
+        Example: !add profile all 10:00-12:00 17:00-20:00"""
 
-        else:
-            try: 
-                time_intervals[ctx.author.id] |= time_interval
+        await update_time_interval('Added', ctx, mode_pattern, day_pattern, or_, time_intervals)
 
-                await ctx.send(f'Added {time_interval_to_str(time_interval)} for {name}.')
+    @commands.command(name = 'remove')
+    async def remove(self, ctx, mode_pattern, day_pattern, *raw_intervals):
+        """Removes one or more time intervals for the calling user
+
+        It is possible to enter an arbitrary number of time intervals. The format of the time intervals has to be XX:XX-XX:XX.
+        
+        Example: !remove active thu 13:00-14:00 17:00-18:00"""
+
+        await update_time_interval('Removed', ctx, mode_pattern, day_pattern, sub, raw_intervals)
+
+    @commands.has_role('Bot Admin')
+    @commands.command(name = 'delete_all')
+    async def delete_all(self, ctx, mode_pattern):
+        """Deletes all database entries
+        
+        This should be used with a lot of caution. There is no way to retract the deleted entries.
+        
+        Example: !delete_all active"""
+
+        iterator = build_iterator(modes = mode_pattern)
+
+        for mode, in iterator:
+            delete_all(mode)
+
+        await ctx.send(f'Emptied the database for {mode}.')
+
+    @commands.command(name = 'delete_me')
+    async def delete_me(self, ctx, mode_pattern):
+        """Deletes the calling user from the database
+        
+        This should be used with a lot of caution. There is no way to retract your deleted entry.
+        
+        Example: !delete_me active"""
+        iterator = build_iterator(modes = mode_pattern)
+
+        for mode, in iterator:
+            delete_user(ctx.author.id, mode)
+
+        await ctx.send(f'Deleted the user {ctx.author.display_name} from {mode_pattern}.')
+
+    @commands.has_role('Bot Admin')
+    @commands.command(name = 'empty_all')
+    async def empty_all(self, ctx, mode_pattern, day_pattern):
+        """Empties time intervals of all users
+        
+        This can be used to reset everything, but be careful. There is no way to retract the deleted information.
+        
+        Example: !empty_all active weekdays"""
+
+        iterator = build_iterator(modes = mode_pattern, days = day_pattern)
+        
+        for mode, day in iterator:
+            empty_all(mode, day)
+
+        await ctx.send(f'Emptied the time intervals for everyone on {long_name(day_pattern)} in {mode_pattern}.')
+
+    @commands.command(name = 'empty_me')
+    async def empty_me(self, ctx, mode_pattern, day_pattern):
+        """Empties the time intervals of the calling user
+        
+        This can be used to reset your time intervals on certain days, but be careful. There is no way to retract the deleted information.
+        
+        Example: !empty_me active weekdays"""
+        iterator = build_iterator(modes = mode_pattern, days = day_pattern)
+
+        for mode, day in iterator:
+            empty_user(ctx.author.id, mode, day)
+
+        await ctx.send(f'Emptied time intervals of {ctx.author.display_name} on {long_name(day_pattern)} in {mode_pattern}.')
+
+    @commands.command(name = 'to_profile')
+    async def to_profile(self, ctx, day_pattern):
+        """Sets the time intervals of the calling user to his/her profile
+        
+        After this call, the time intervals in active, which are used to compute common time intervals, are set to equal the ones in profile. Be careful, the time intervals in active cannot be restored.
+        
+        Example: !to_profile all"""
+        
+        iterator = build_iterator(days = day_pattern)
+
+        user_id = ctx.author.id
+
+        if not in_database(user_id, 'profile'):
+            await ctx.send('You have no registered times in profile.')
+            return
+
+        for day, in iterator:
+            interval = get_time_interval(user_id, day, 'profile')
             
-            except:
-                await ctx.send('Insertion failed. Try full reseting if possible.')
+            set_time_interval(user_id, day, 'active', interval)
 
-        await send_state_in_discord(f'add ({name})')
-
-    @commands.has_role('Bot Admin')
-    @commands.command(name = 'reset_all', help = 'Resets the timetable for everyone to the last saved state, only "Bot Admin" can do this')
-    async def reset_all(self, ctx):
-        time_intervals.clear()
-
-        initialize_time_intervals()
-
-        await ctx.send('Reseted the timetable.')
-
-        await send_state_in_discord(f'reset_all ({ctx.author.display_name})')
-
-    @commands.has_role('Bot Admin')
-    @commands.command(name = 'empty', help = 'Empties the timetable for everyone, only "Bot Admin" can do this')
-    async def empty(self, ctx):
-        time_intervals.clear()
-
-        guild = get(self.bot.guilds, name=GUILD)
-
-        for member in guild.members:
-            if not member.bot:
-                time_intervals[member.id] = I.empty()
-
-        await ctx.send('Emptied the timetable.')
-
-        await send_state_in_discord(f'empty ({ctx.author.display_name})')
-
-    @commands.command(name = 'empty_me', help = 'Empties the timetable for the calling user')
-    async def empty_me(self, ctx):
-        name = ctx.author.display_name
-
-        time_intervals[ctx.author.id] = I.empty()
-
-        await ctx.send(f'Emptied the timetable for {name}.')
-
-        await send_state_in_discord(f'reset_me ({name})')
+        await ctx.send(f'Set the time intervals for {ctx.author.display_name} on {long_name(day_pattern)} to his/her profile.')

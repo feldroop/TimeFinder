@@ -1,92 +1,73 @@
 from discord.ext import commands
 
-from config import (
-    GUILD,
-    saving_loop_running,
-    time_intervals
+from setup import (
+    file_existed,
+    db_connection
 )
 
 from utils import (
-    get,
-    initialize_time_intervals,
-    keep_saving,
-    send_state_in_discord,
-    save_time_intervals,
-    I
+    delete_inactive_users,
+    ParseError
+)
+
+from queries import (
+    initialize_database,
+    delete_user,
+    in_database
 )
 
 class Administration(commands.Cog):
+    """The commands in this command group are for admin use only."""
     def __init__(self, bot):
         self.bot = bot
 
     @commands.has_role('Bot Admin')
-    @commands.command(name = 'disconnect', help = 'Disconnects the bot and saves the timetable')
+    @commands.command(name = 'disconnect')
     async def disconnect(self, ctx):
-        await ctx.send('Goodbye.')
+        """Disconnects the bot.
 
-        await send_state_in_discord('disconnect')
+        There are no parameters. The database is saved."""
+        
+        await ctx.send('Goodbye.')
 
         await self.bot.logout()
 
     @commands.Cog.listener()
     async def on_ready(self):
-        guild = get(self.bot.guilds, name=GUILD)
-
         print(
-            f'{self.bot.user} is connected to the following guild:\n'
-            f'{guild.name}(id: {guild.id})'
+            f'{self.bot.user} is connected and ready.'
         )
-
-        initialize_time_intervals()
-
-        global saving_loop_running
-        if not saving_loop_running:
-            keep_saving.start()
-            saving_loop_running = True
-
-        await send_state_in_discord('ready')
-
-    @commands.Cog.listener()
-    async def on_member_join(self, member):
-        if not member.bot:
-            time_intervals[member.id] = I.empty()
+        
+        if not file_existed:
+            initialize_database()
+        
+        else:
+            delete_inactive_users()
 
     @commands.Cog.listener()
     async def on_member_remove(self, member):
-        if not member.bot:
-            del time_intervals[member.id]
+        for mode in ['active', 'profile']: 
+            if in_database(member.id, mode):
+                delete_user(member.id, mode)
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
-        title = 'ERROR'
-
         if isinstance(error, commands.CheckFailure):
             await ctx.send('You are not allowed to do this.')
-
-            title = 'CheckFailure'
 
         elif isinstance(error, commands.MissingRequiredArgument):
             await ctx.send('A required argument is missing.')
 
-            title = 'MissingRequiredArgument'
-
         elif isinstance(error, commands.CommandNotFound):
             await ctx.send('This command does not exist. Did you misspell it?')
 
-            title = 'CommandNotFound'
-
         elif isinstance(error, commands.TooManyArguments):
             await ctx.send('You entered too many Arguments.')
-
-            title = 'MissingRequiredArgument'
-
-        await send_state_in_discord(title)
+        
+        elif isinstance(error, commands.CommandInvokeError):
+            original = error.original
+            if isinstance(original, ParseError):
+                await ctx.send(original)
 
         # enable for debugging
         raise error
-
-    @commands.Cog.listener()
-    async def on_disconnect(self):
-        keep_saving.stop()
-
-        save_time_intervals()

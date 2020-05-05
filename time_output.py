@@ -1,34 +1,85 @@
 from discord.ext import commands
 
-from datetime import time
-
 from utils import (
-    time_intervals,
-    time_interval_to_str,
-    send_state_in_discord,
-    all_intervals_md_format,
-    I
+    time_intervals_to_str_readable,
+    all_intervals_format,
+    long_name,
+    get_common_interval,
+    build_iterator,
+    is_empty
 )
+
+from queries import(
+    get_time_interval,
+    in_database
+)
+
 class Output(commands.Cog):
+    """The commands in this command group let you view the registered and compute common time intervals."""
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name = 'when', help = 'Calculates the common time of all members')
-    async def when(self, ctx):
-        common_interval = I.closed(time(0, 1), time(23, 59))
+    @commands.command(name = 'when')
+    async def when(self, ctx, day_pattern):
+        """Calculates the common time intervals of all members.
+        
+        This computes the intersection of the time intervals in active mode for all members of the server on the given day(s).
 
-        for member_interval in time_intervals.values():
-            common_interval &= member_interval
+        Example: !when weekend"""
 
-        if common_interval.is_empty():
-            await ctx.send('There is no common time.')
-        else:
-            await ctx.send(time_interval_to_str(common_interval))
+        iterator = build_iterator(days = day_pattern)
 
-        await send_state_in_discord(f'when ({ctx.author.display_name})')
+        output = '**Common time intervals for all members:**\n'
 
-    @commands.command(name = 'show', help = 'Prints all currently registered time intervals')
-    async def show(self, ctx):
-        await ctx.send(all_intervals_md_format('Time intervals'))
+        for day, in iterator:
+            common_interval = get_common_interval(day)
 
-        await send_state_in_discord(f'show ({ctx.author.name})')
+            if is_empty(common_interval):
+                output += f'\t**{long_name(day)}**: No common time interval.\n'
+            
+            else:
+                output += f'\t**{long_name(day)}**: {time_intervals_to_str_readable(common_interval)}\n'
+        
+        await ctx.send(output)
+
+    @commands.command(name = 'show_all')
+    async def show_all(self, ctx, mode_pattern, day_pattern):
+        """Prints currently registered time intervals.
+        
+        Reads the database for the given mode(s) and returns a formatted version of the time intervals of all the server's users on the given day(s).
+        
+        Example: !show_all active weekdays"""
+
+        iterator = build_iterator(modes = mode_pattern, days = day_pattern)
+        
+        output = '**All currently registered time intervals:**\n'
+
+        for mode, day in iterator:
+            output += all_intervals_format(mode, day)
+
+        await ctx.send(output)
+
+    @commands.command(name = 'show_me')
+    async def show_me(self, ctx, mode_pattern, day_pattern):
+        """Prints currently registered time intervals for the calling user.
+        
+        Reads the database for the given mode(s) and returns a formatted version of the time intervals of the calling user on the given day(s).
+        
+        Example: !show_me profile fri"""
+
+        iterator = build_iterator(modes = mode_pattern, days = day_pattern)
+        
+        user_id = ctx.author.id
+    	
+        for mode, day in iterator:
+            if day == 'mon':
+                if not in_database(user_id, mode):
+                    await ctx.send(f'You have no registered time intervals in {mode}.')
+                    return
+
+                output = f'**Time intervals for {ctx.author.display_name} in {mode}:**\n'
+
+            interval = get_time_interval(user_id, day, mode)
+            output += f'\t**{long_name(day)}:** {time_intervals_to_str_readable(interval)}\n'
+
+        await ctx.send(output)
